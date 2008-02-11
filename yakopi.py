@@ -23,6 +23,15 @@ from array import array
 from xml.dom import minidom
 
 
+__all__ = [
+    'Message',
+    'Archive',
+    'kopete_parse',
+    'pidgin_parse',
+    'yahoo_decode'
+    ]
+
+
 class Message(object):
 
     def __init__(self, inbound, day, time, content):
@@ -41,7 +50,13 @@ class Archive(object):
         self.month = None
         self.messages = []
 
-    def to_kopete(self, fname=None):
+    def to_kopete(self, outfile=None):
+        """Output the archive contents as a Kopete history file.
+
+        @param outfile: file to write contents to
+
+        Returns the file contents if outfile is None, else returns None.
+        """
         doc = minidom.Document()
         # DOCTYPE
         doctype = minidom.DocumentType("Kopete-History")
@@ -80,8 +95,8 @@ class Archive(object):
             text = doc.createTextNode(msg.content)
             msg_elem.appendChild(text)
             history.appendChild(msg_elem)
-        if fname is not None:
-            file = open(fname, 'w')
+        if outfile is not None:
+            file = open(outfile, 'w')
             file.writelines(doc.toxml().\
                 replace('<?xml version="1.0" ?>\n', '').\
                 replace('<h', '\n <h').\
@@ -101,7 +116,13 @@ class Archive(object):
                 replace('<m', '\n <m').\
                 replace('</k', '\n</k')
 
-    def to_pidgin(self, fname=None):
+    def to_pidgin(self, outfile=None):
+        """Output the archive contents as a Pidgin log file.
+
+        @param outfile: file to write contents to
+
+        Returns the file contents if outfile is None, else returns None.
+        """
         lines = []
         msg = self.messages[0]
         line = "Conversation with %s at %d-%02d-%02d %02d:%02d:%02d on %s (yahoo)" % \
@@ -110,77 +131,92 @@ class Archive(object):
         for msg in self.messages:
             line = "(%02d:%02d:%02d) %s: %s" % (msg.time[0], msg.time[1], msg.time[2], self.peer if msg.inbound else self.myself, msg.content)
             lines.append(line)
-        if fname is not None:
-            file = open(fname, 'w')
+        if outfile is not None:
+            file = open(outfile, 'w')
             file.writelines("\n".join(lines))
             file.close()
         else:
             return "\n".join(lines)
 
-    def to_yahoo(self, fname=None):
+    def to_yahoo(self, outfile=None):
+        """Output the archive contents as a Yahoo! Messenger archive file.
+
+        This method is not yet implemented.
+
+        @param outfile: file to write contents to
+
+        Returns the file contents if outfile is None, else returns None.
+        """
         raise NotImplementedError("to_yahoo() method not yet implemented")
 
 
-def kopete_parse(filename):
-    conv = Archive()
-    xml = minidom.parse(filename)
+def kopete_parse(path):
+    """Parse a Kopete history file
 
-    for contact in xml.getElementsByTagName('contact'):
+    @param path: path to history file
+
+    Returns an instance of Archive which contains the data.
+    """
+    archive = Archive()
+    doc = minidom.parse(path)
+
+    for contact in doc.getElementsByTagName('contact'):
         if contact.getAttribute('type') == 'myself':
             myself = contact.getAttribute('contactId')
         else:
             peer = contact.getAttribute('contactId')
-    conv.myself = str(myself)
-    conv.peer = str(peer)
+    archive.myself = str(myself)
+    archive.peer = str(peer)
 
-    date = xml.getElementsByTagName('date')[0]
-    conv.month = int(date.getAttribute('month'))
-    conv.year = int(date.getAttribute('year'))
+    date = doc.getElementsByTagName('date')[0]
+    archive.month = int(date.getAttribute('month'))
+    archive.year = int(date.getAttribute('year'))
 
-    for msg in xml.getElementsByTagName('msg'):
+    for msg in doc.getElementsByTagName('msg'):
         inbound = True if msg.getAttribute('in') == '1' else False
         content = str(msg.childNodes[0].wholeText)
         day, time = msg.getAttribute('time').split()
         time = tuple(map(int, time.split(':')))
         message = Message(inbound, int(day), time, content)
-        conv.messages.append(message)
-    return conv
+        archive.messages.append(message)
+    return archive
 
 
-def pidgin_parse(filename):
-    conv = Archive()
-    for fname in filename:
-        file = open(fname, 'r')
+def pidgin_parse(log_files):
+    """Parse a list of Pidgin log files
+
+    @param log_files: list of log files
+
+    Returns an instance of Archive which contains the data.
+    """
+    archive = Archive()
+    for filename in log_files:
+        file = open(filename, 'r')
         for line in file:
             if line.startswith('('):
                 time, sender, content = line.split(' ', 2)
-                con = [content]
-                #if not content:
-                #    print "wala"
-                #print "'"+content+"'"
                 if not sender.endswith(':'):
                     continue
-                if more:
-                    con.append(line)
-                    more = False
-                    continue
                 time = tuple(map(int, time.lstrip('(').rstrip(')').split(':')))
-                inbound = True if sender.startswith(conv.peer) else False
+                inbound = True if sender.startswith(archive.peer) else False
                 msg = Message(inbound, day, time, content.rstrip())
-                conv.messages.append(msg)
+                archive.messages.append(msg)
             elif line.startswith('Conversation'):
                 data = line.split()
-                conv.myself = data[7]
-                conv.peer = data[2]
-                conv.year, conv.month, day = map(int, data[4].split('-'))
-            else:
-                text = line
-                more = True
+                archive.myself = data[7]
+                archive.peer = data[2]
+                archive.year, archive.month, day = map(int, data[4].split('-'))
         file.close()
-    return conv
+    return archive
 
 
 def yahoo_decode(path):
+    """Decode a Yahoo! Messenger archive file
+
+    @param path: full path to archive file
+
+    Returns an instance of Archive which contains the data.
+    """
     #
     # TODO: look out for 'Buzz!'
 
