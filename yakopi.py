@@ -18,7 +18,7 @@
 
 
 import os
-import time
+from time import ctime
 from array import array
 from xml.dom import minidom
 
@@ -182,15 +182,15 @@ def kopete_parse(path):
     return archive
 
 
-def pidgin_parse(log_files):
+def pidgin_parse(files):
     """Parse a list of Pidgin log files
 
-    @param log_files: list of log files
+    @param files: list of log files
 
     Returns an instance of Archive which contains the data.
     """
     archive = Archive()
-    for filename in log_files:
+    for filename in files:
         file = open(filename, 'r')
         for line in file:
             if line.startswith('('):
@@ -210,10 +210,10 @@ def pidgin_parse(log_files):
     return archive
 
 
-def yahoo_decode(path):
+def yahoo_decode(files):
     """Decode a Yahoo! Messenger archive file
 
-    @param path: full path to archive file
+    @param files: list of archive files (full path)
 
     Returns an instance of Archive which contains the data.
     """
@@ -226,50 +226,49 @@ def yahoo_decode(path):
         }
 
     archive = Archive()
-    ps = path.split(os.sep)
 
-    encrypt_id = ps[ps.index('Profiles') + 1]
-    archive.peer = ps[ps.index('Messages') + 1]
-    archive.myself = ps[ps.index(archive.peer) + 1].split('-')[1].rstrip('.dat')
-
-    readint = array('l') # 32-bit signed int
-    readbyte = array('b') # 1 byte (8-bit int)
-
-    file = open(path, 'rb')
-    readint.fromfile(file, 5)
-    timestamp = readint[0]
-    # Clear readint
-    map(readint.remove, readint.tolist())
-    datetime = time.ctime(timestamp).split()
-    # month
-    archive.month = months[datetime[1]]
-    # year
-    archive.year = int(datetime[4])
-    while file:
-        try:
-            readint.fromfile(file, 4)
-        except EOFError:
-            break
-        timestamp, unknown, user, datalength = readint.tolist()
-        inbound = True if user else False
-        # get day, time
-        day, time_ = time.ctime(timestamp).split()[2:4]
-        time_ = tuple(map(int, time_.split(':')))
-        readbyte.fromfile(file, datalength)
-        line = []
-        idx = 0
-        # decode message
-        for i in range(datalength):
-            line.append(chr(readbyte[i] ^ ord(encrypt_id[idx])))
-            idx += 1
-            if idx == len(encrypt_id):
-                idx = 0
-        msg = Message(inbound, int(day), time_, "".join(line))
-        archive.messages.append(msg)
-        # read terminator
-        readint.fromfile(file, 1)
-        # Clear the arrays
-        map(readint.remove, readint.tolist())
-        map(readbyte.remove, readbyte.tolist())
-    file.close()
+    for path in files:
+        ps = path.split(os.sep)
+        # Extract info based on path.
+        encrypt_id = ps[ps.index('Profiles') + 1]
+        archive.peer = ps[ps.index('Messages') + 1]
+        archive.myself = ps[ps.index(archive.peer, ps.index('Messages')) + 1].split('-')[1].rstrip('.dat')
+        # Setup the 'data readers'.
+        readint = array('l') # 32-bit signed int
+        readbyte = array('b') # 1 byte (8-bit int)
+        file = open(path, 'rb')
+        while file:
+            try:
+                readint.fromfile(file, 4)
+            except EOFError:
+                break
+            timestamp, unknown, user, datalength = readint.tolist()
+            # Get message direction.
+            inbound = True if user else False
+            # Get the date and time info.
+            month, day, time, year = ctime(timestamp).split()[1:]
+            day = int(day)
+            time = tuple(map(int, time.split(':')))
+            if archive.month is None:
+                archive.month = months[month]
+                archive.year = int(year)
+            line = []
+            idx = 0
+            # Read the message content.
+            readbyte.fromfile(file, datalength)
+            # Decode the message.
+            for i in range(datalength):
+                if readbyte[i] >= 0:
+                    line.append(chr(readbyte[i] ^ ord(encrypt_id[idx])))
+                idx += 1
+                if idx == len(encrypt_id):
+                    idx = 0
+            msg = Message(inbound, int(day), time, "".join(line))
+            archive.messages.append(msg)
+            # Read message terminator.
+            readint.fromfile(file, 1)
+            # Clear the arrays.
+            map(readint.remove, readint.tolist())
+            map(readbyte.remove, readbyte.tolist())
+        file.close()
     return archive
