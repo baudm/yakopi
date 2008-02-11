@@ -254,7 +254,7 @@ def yahoo_decode(path):
         inbound = True if user else False
         # get day, time
         day, time_ = time.ctime(timestamp).split()[2:4]
-        time_ = map(int, time_.split(':'))
+        time_ = tuple(map(int, time_.split(':')))
         readbyte.fromfile(file, datalength)
         line = []
         idx = 0
