@@ -19,6 +19,7 @@
 
 import os
 import time
+import datetime
 from array import array
 from xml.dom import minidom
 
@@ -106,14 +107,10 @@ class Archive(object):
             msg.appendChild(content)
             history.appendChild(msg)
 
-        xml = doc.toxml().\
-            replace('<?xml version="1.0" ?>\n', '').\
-            replace('<h', '\n <h').\
-            replace('<d', '\n  <d').\
-            replace('<c', '\n  <c').\
-            replace('</h', '\n </h').\
-            replace('<m', '\n <m').\
-            replace('</k', '\n</k')
+        xml = doc.toxml().replace('<?xml version="1.0" ?>\n', '').\
+            replace('<h', '\n <h').replace('<d', '\n  <d').\
+            replace('<c', '\n  <c').replace('</h', '\n </h').\
+            replace('<m', '\n <m').replace('</k', '\n</k')
 
         if outdir is not None:
             fname = "%s.%d%02d.xml" % (self.peer, self.year, self.month)
@@ -132,16 +129,17 @@ class Archive(object):
         Returns the file contents if outdir is None, else returns None.
         """
         msg = self.messages[0]
+        datetime_ = datetime.datetime(self.year, self.month, msg.day, *msg.time)
         lines = []
-        line = "Conversation with %s at %d-%02d-%02d %02d:%02d:%02d on %s (yahoo)" % \
-            (self.peer, self.year, self.month, msg.day, msg.time[0], msg.time[1], msg.time[2], self.myself)
+        line = "Conversation with %s at %s on %s (yahoo)" % (self.peer, datetime_.strftime('%A, %d %B, %Y %I:%M:%S %p'), self.myself)
         lines.append(line)
         for msg in self.messages:
-            line = "(%02d:%02d:%02d) %s: %s" % (msg.time[0], msg.time[1], msg.time[2], self.peer if msg.inbound else self.myself, msg.content)
+            time_str = datetime.time(*msg.time).strftime('%I:%M:%S')
+            line = "(%s) %s: %s" % (time_str, self.peer if msg.inbound else self.myself, msg.content)
             lines.append(line)
         if outdir is not None:
             msg = self.messages[0]
-            fname = "%d-%02d-%02d.%02d%02d%02d.txt" % (self.year, self.month, msg.day, msg.time[0], msg.time[1], msg.time[2])
+            fname = datetime_.strftime('%Y-%m-%d.%H%M%S.txt')
             path = os.path.join(outdir, fname)
             outfile = open(path, 'w')
             outfile.writelines("\n".join(lines))
