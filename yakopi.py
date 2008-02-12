@@ -288,18 +288,18 @@ def yahoo_decode(files):
             if archive.month is None:
                 archive.month = months[month]
                 archive.year = int(year)
-            line = []
-            idx = 0
             # Read the message content.
             readbyte.fromfile(file, datalength)
+            idx = 0
+            content = []
             # Decode the message.
-            for i in range(datalength):
-                if readbyte[i] >= 0:
-                    line.append(chr(readbyte[i] ^ ord(encrypt_id[idx])))
+            for byte in readbyte:
+                if byte >= 0:
+                    content.append(chr(byte ^ ord(encrypt_id[idx])))
                 idx += 1
                 if idx == len(encrypt_id):
                     idx = 0
-            msg = Message(inbound, int(day), time, "".join(line))
+            msg = Message(inbound, day, time, "".join(content))
             archive.messages.append(msg)
             # Read message terminator.
             readint.fromfile(file, 1)
