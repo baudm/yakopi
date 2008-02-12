@@ -50,7 +50,7 @@ class Archive(object):
         self.month = None
         self.messages = []
 
-    def to_kopete(self, outfile=None):
+    def to_kopete(self, outdir=None, outfile=None):
         """Output the archive contents as a Kopete history file.
 
         @param outfile: file to write contents to
@@ -116,15 +116,21 @@ class Archive(object):
                 replace('<m', '\n <m').\
                 replace('</k', '\n</k')
 
-    def to_pidgin(self, outfile=None):
+    def to_pidgin(self, outdir=None, outfile=None):
         """Output the archive contents as a Pidgin log file.
 
         @param outfile: file to write contents to
 
         Returns the file contents if outfile is None, else returns None.
         """
-        lines = []
         msg = self.messages[0]
+
+        path = outdir if outdir is not None else ''
+        path = os.path.join(path, outfile) if outfile is not None else \
+            os.path.join(path, self.myself, self.peer, "%d-%02d-%02d.%02d%02d%02d.txt" % \
+            (self.year, self.month, msg.day, msg.time[0], msg.time[1], msg.time[2]))
+        
+        lines = []
         line = "Conversation with %s at %d-%02d-%02d %02d:%02d:%02d on %s (yahoo)" % \
             (self.peer, self.year, self.month, msg.day, msg.time[0], msg.time[1], msg.time[2], self.myself)
         lines.append(line)
@@ -138,7 +144,7 @@ class Archive(object):
         else:
             return "\n".join(lines)
 
-    def to_yahoo(self, outfile=None):
+    def to_yahoo(self, outdir=None, outfile=None):
         """Output the archive contents as a Yahoo! Messenger archive file.
 
         This method is not yet implemented.
