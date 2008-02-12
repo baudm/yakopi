@@ -182,7 +182,7 @@ def kopete_parse(path):
     return archive
 
 
-def pidgin_parse(files):
+def gaim_parse(files):
     """Parse a list of Pidgin log files
 
     @param files: list of log files
@@ -206,6 +206,42 @@ def pidgin_parse(files):
                 archive.myself = data[7]
                 archive.peer = data[2]
                 archive.year, archive.month, day = map(int, data[4].split('-'))
+        file.close()
+    return archive
+    
+    
+def pidgin_parse(files):
+    """Parse a list of Pidgin log files
+
+    @param files: list of log files
+
+    Returns an instance of Archive which contains the data.
+    """
+    
+    months = {
+        'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6,
+        'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12
+        }
+    
+    archive = Archive()
+    for filename in files:
+        file = open(filename, 'r')
+        for line in file:
+            if line.startswith('('):
+                time, tzone, sender, content = line.split()
+                if not sender.endswith(':'):
+                    continue
+                time = tuple(map(int, time.lstrip('(').rstrip(')').split(':')))
+                inbound = True if sender.startswith(archive.peer) else False
+                msg = Message(inbound, day, time, content.rstrip())
+                archive.messages.append(msg)
+            elif line.startswith('Conversation'):
+                data = line.split()
+                archive.myself = data[12]
+                archive.peer = data[2]
+                day, month, year = data[5:8]
+                day, archive.year = map(int, (day, year))
+                archive.month = months[month.rstrip(',')]
         file.close()
     return archive
 
