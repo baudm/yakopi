@@ -27,6 +27,7 @@ __all__ = [
     'Message',
     'Archive',
     'kopete_parse',
+    'gaim_parse',
     'pidgin_parse',
     'yahoo_decode'
     ]
@@ -39,6 +40,10 @@ class Message(object):
         self.day = day
         self.time = time
         self.content = content
+        
+    def __repr__(self):
+        content = self.content[:20]
+        return "".join([content, '...' if content != self.content else ''])
 
 
 class Archive(object):
@@ -50,6 +55,9 @@ class Archive(object):
         self.month = None
         self.messages = []
 
+    def __repr__(self):
+        return "Conversation of %s with %s" % (self.myself, self.peer)
+
     def to_kopete(self, outdir=None, outfile=None):
         """Output the archive contents as a Kopete history file.
 
@@ -59,27 +67,27 @@ class Archive(object):
         """
         doc = minidom.Document()
         # DOCTYPE
-        doctype = minidom.DocumentType("Kopete-History")
+        doctype = minidom.DocumentType('Kopete-History')
         doc.appendChild(doctype)
         # kopete-history
-        history = doc.createElement("kopete-history")
+        history = doc.createElement('kopete-history')
         history.setAttribute('version', '0.9')
         doc.appendChild(history)
         # head
-        head = doc.createElement("head")
+        head = doc.createElement('head')
         history.appendChild(head)
         # date
-        date = doc.createElement("date")
+        date = doc.createElement('date')
         date.setAttribute('month', str(self.month))
         date.setAttribute('year', str(self.year))
         head.appendChild(date)
         # contact: myself
-        myself = doc.createElement("contact")
+        myself = doc.createElement('contact')
         myself.setAttribute('contactId', self.myself)
         myself.setAttribute('type', 'myself')
         head.appendChild(myself)
         # contact: peer
-        peer = doc.createElement("contact")
+        peer = doc.createElement('contact')
         peer.setAttribute('contactId', self.peer)
         head.appendChild(peer)
         # msg
