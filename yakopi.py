@@ -269,16 +269,16 @@ def yahoo_decode(files):
         encrypt_id = ps[ps.index('Profiles') + 1]
         archive.peer = ps[ps.index('Messages') + 1]
         archive.myself = ps[ps.index(archive.peer, ps.index('Messages')) + 1].split('-')[1].rstrip('.dat')
-        # Setup the 'data readers'.
-        readint = array('l') # 32-bit signed int
-        readbyte = array('b') # 1 byte (8-bit int)
         file = open(path, 'rb')
         while file:
+            # Initialize the 'data readers'.
+            readint = array('l') # 32-bit signed int
+            readbyte = array('b') # 1 byte (8-bit int)
             try:
                 readint.fromfile(file, 4)
             except EOFError:
                 break
-            timestamp, unknown, user, datalength = readint.tolist()
+            timestamp, unknown, user, msglength = readint.tolist()
             # Get message direction.
             inbound = True if user else False
             # Get the date and time info.
@@ -289,7 +289,7 @@ def yahoo_decode(files):
                 archive.month = months[month]
                 archive.year = int(year)
             # Read the message content.
-            readbyte.fromfile(file, datalength)
+            readbyte.fromfile(file, msglength)
             idx = 0
             content = []
             # Decode the message.
@@ -303,8 +303,5 @@ def yahoo_decode(files):
             archive.messages.append(msg)
             # Read message terminator.
             readint.fromfile(file, 1)
-            # Clear the arrays.
-            map(readint.remove, readint.tolist())
-            map(readbyte.remove, readbyte.tolist())
         file.close()
     return archive
