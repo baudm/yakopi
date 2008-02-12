@@ -35,15 +35,17 @@ __all__ = [
 
 class Message(object):
 
+    __slots__ = ['inbound', 'day', 'time', 'content']
+
     def __init__(self, inbound, day, time, content):
         self.inbound = inbound
         self.day = day
         self.time = time
         self.content = content
-        
+
     def __repr__(self):
         content = self.content[:20]
-        return "".join([content, '...' if content != self.content else ''])
+        return "<%s%s>" % (content, '...' if content != self.content else '')
 
 
 class Archive(object):
@@ -56,14 +58,14 @@ class Archive(object):
         self.messages = []
 
     def __repr__(self):
-        return "Conversation of %s with %s" % (self.myself, self.peer)
+        return "<Conversation of %s with %s>" % (self.myself, self.peer)
 
-    def to_kopete(self, outdir=None, outfile=None):
+    def to_kopete(self, outdir=None):
         """Output the archive contents as a Kopete history file.
 
-        @param outfile: file to write contents to
+        @param outdir: directory to write the output to
 
-        Returns the file contents if outfile is None, else returns None.
+        Returns the file contents if outdir is None, else returns None.
         """
         doc = minidom.Document()
         # DOCTYPE
@@ -91,53 +93,45 @@ class Archive(object):
         peer.setAttribute('contactId', self.peer)
         head.appendChild(peer)
         # msg
-        for msg in self.messages:
-            msg_elem = doc.createElement('msg')
-            from_ = self.peer if msg.inbound else self.myself
-            in_ = '1' if msg.inbound else '0'
-            time = "%d %s" % (msg.day, ":".join(map(str, msg.time)))
-            msg_elem.setAttribute('nick', from_)
-            msg_elem.setAttribute('in', in_)
-            msg_elem.setAttribute('from', from_)
-            msg_elem.setAttribute('time', time)
-            text = doc.createTextNode(msg.content)
-            msg_elem.appendChild(text)
-            history.appendChild(msg_elem)
-        if outfile is not None:
-            file = open(outfile, 'w')
-            file.writelines(doc.toxml().\
-                replace('<?xml version="1.0" ?>\n', '').\
-                replace('<h', '\n <h').\
-                replace('<d', '\n  <d').\
-                replace('<c', '\n  <c').\
-                replace('</h', '\n </h').\
-                replace('<m', '\n <m').\
-                replace('</k', '\n</k'))
+        for message in self.messages:
+            msg = doc.createElement('msg')
+            from_ = self.peer if message.inbound else self.myself
+            in_ = '1' if message.inbound else '0'
+            time = "%d %s" % (message.day, ":".join(map(str, message.time)))
+            msg.setAttribute('nick', from_)
+            msg.setAttribute('in', in_)
+            msg.setAttribute('from', from_)
+            msg.setAttribute('time', time)
+            content = doc.createTextNode(message.content)
+            msg.appendChild(content)
+            history.appendChild(msg)
+
+        xml = doc.toxml().\
+            replace('<?xml version="1.0" ?>\n', '').\
+            replace('<h', '\n <h').\
+            replace('<d', '\n  <d').\
+            replace('<c', '\n  <c').\
+            replace('</h', '\n </h').\
+            replace('<m', '\n <m').\
+            replace('</k', '\n</k')
+
+        if outdir is not None:
+            fname = "%s.%d%02d.xml" % (self.peer, self.year, self.month)
+            path = os.path.join(outdir, fname)
+            file = open(path, 'w')
+            file.writelines(xml)
             file.close()
         else:
-            return doc.toxml().\
-                replace('<?xml version="1.0" ?>\n', '').\
-                replace('<h', '\n <h').\
-                replace('<d', '\n  <d').\
-                replace('<c', '\n  <c').\
-                replace('</h', '\n </h').\
-                replace('<m', '\n <m').\
-                replace('</k', '\n</k')
+            return xml
 
-    def to_pidgin(self, outdir=None, outfile=None):
+    def to_pidgin(self, outdir=None):
         """Output the archive contents as a Pidgin log file.
 
-        @param outfile: file to write contents to
+        @param outdir: directory to write the output to
 
-        Returns the file contents if outfile is None, else returns None.
+        Returns the file contents if outdir is None, else returns None.
         """
         msg = self.messages[0]
-
-        path = outdir if outdir is not None else ''
-        path = os.path.join(path, outfile) if outfile is not None else \
-            os.path.join(path, self.myself, self.peer, "%d-%02d-%02d.%02d%02d%02d.txt" % \
-            (self.year, self.month, msg.day, msg.time[0], msg.time[1], msg.time[2]))
-        
         lines = []
         line = "Conversation with %s at %d-%02d-%02d %02d:%02d:%02d on %s (yahoo)" % \
             (self.peer, self.year, self.month, msg.day, msg.time[0], msg.time[1], msg.time[2], self.myself)
@@ -145,21 +139,24 @@ class Archive(object):
         for msg in self.messages:
             line = "(%02d:%02d:%02d) %s: %s" % (msg.time[0], msg.time[1], msg.time[2], self.peer if msg.inbound else self.myself, msg.content)
             lines.append(line)
-        if outfile is not None:
-            file = open(outfile, 'w')
+        if outdir is not None:
+            msg = self.messages[0]
+            fname = "%d-%02d-%02d.%02d%02d%02d.txt" % (self.year, self.month, msg.day, msg.time[0], msg.time[1], msg.time[2])
+            path = os.path.join(outdir, fname)
+            file = open(path, 'w')
             file.writelines("\n".join(lines))
             file.close()
         else:
             return "\n".join(lines)
 
-    def to_yahoo(self, outdir=None, outfile=None):
+    def to_yahoo(self, outdir=None):
         """Output the archive contents as a Yahoo! Messenger archive file.
 
         This method is not yet implemented.
 
-        @param outfile: file to write contents to
+        @param outdir: directory to write the output to
 
-        Returns the file contents if outfile is None, else returns None.
+        Returns the file contents if outdir is None, else returns None.
         """
         raise NotImplementedError("to_yahoo() method not yet implemented")
 
@@ -173,7 +170,7 @@ def kopete_parse(path):
     """
     archive = Archive()
     doc = minidom.parse(path)
-
+    # Get contact info.
     for contact in doc.getElementsByTagName('contact'):
         if contact.getAttribute('type') == 'myself':
             myself = contact.getAttribute('contactId')
@@ -181,11 +178,11 @@ def kopete_parse(path):
             peer = contact.getAttribute('contactId')
     archive.myself = str(myself)
     archive.peer = str(peer)
-
+    # Get month and year info.
     date = doc.getElementsByTagName('date')[0]
     archive.month = int(date.getAttribute('month'))
     archive.year = int(date.getAttribute('year'))
-
+    # Get message info.
     for msg in doc.getElementsByTagName('msg'):
         inbound = True if msg.getAttribute('in') == '1' else False
         content = str(msg.childNodes[0].wholeText)
@@ -222,8 +219,8 @@ def gaim_parse(files):
                 archive.year, archive.month, day = map(int, data[4].split('-'))
         file.close()
     return archive
-    
-    
+
+
 def pidgin_parse(files):
     """Parse a list of Pidgin log files
 
@@ -231,18 +228,18 @@ def pidgin_parse(files):
 
     Returns an instance of Archive which contains the data.
     """
-    
+
     months = {
         'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6,
         'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12
         }
-    
+
     archive = Archive()
     for filename in files:
         file = open(filename, 'r')
         for line in file:
             if line.startswith('('):
-                time, tzone, sender, content = line.split()
+                time, u, tzone, sender, content = line.split(' ', 4)
                 if not sender.endswith(':'):
                     continue
                 time = tuple(map(int, time.lstrip('(').rstrip(')').split(':')))
