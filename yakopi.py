@@ -18,7 +18,7 @@
 
 
 import os
-from time import ctime
+import time
 from array import array
 from xml.dom import minidom
 
@@ -118,9 +118,9 @@ class Archive(object):
         if outdir is not None:
             fname = "%s.%d%02d.xml" % (self.peer, self.year, self.month)
             path = os.path.join(outdir, fname)
-            file = open(path, 'w')
-            file.writelines(xml)
-            file.close()
+            outfile = open(path, 'w')
+            outfile.writelines(xml)
+            outfile.close()
         else:
             return xml
 
@@ -143,9 +143,9 @@ class Archive(object):
             msg = self.messages[0]
             fname = "%d-%02d-%02d.%02d%02d%02d.txt" % (self.year, self.month, msg.day, msg.time[0], msg.time[1], msg.time[2])
             path = os.path.join(outdir, fname)
-            file = open(path, 'w')
-            file.writelines("\n".join(lines))
-            file.close()
+            outfile = open(path, 'w')
+            outfile.writelines("\n".join(lines))
+            outfile.close()
         else:
             return "\n".join(lines)
 
@@ -202,8 +202,12 @@ def gaim_parse(files):
     """
     archive = Archive()
     for filename in files:
-        file = open(filename, 'r')
-        for line in file:
+        infile = open(filename, 'r')
+        data = infile.readline().split()
+        archive.myself = data[7]
+        archive.peer = data[2]
+        archive.year, archive.month, day = map(int, data[4].split('-'))
+        for line in infile:
             if line.startswith('('):
                 time, sender, content = line.split(' ', 2)
                 if not sender.endswith(':'):
@@ -212,12 +216,7 @@ def gaim_parse(files):
                 inbound = True if sender.startswith(archive.peer) else False
                 msg = Message(inbound, day, time, content.rstrip())
                 archive.messages.append(msg)
-            elif line.startswith('Conversation'):
-                data = line.split()
-                archive.myself = data[7]
-                archive.peer = data[2]
-                archive.year, archive.month, day = map(int, data[4].split('-'))
-        file.close()
+        infile.close()
     return archive
 
 
@@ -236,24 +235,23 @@ def pidgin_parse(files):
 
     archive = Archive()
     for filename in files:
-        file = open(filename, 'r')
-        for line in file:
+        infile = open(filename, 'r')
+        data = infile.readline().split()
+        archive.myself = data[12]
+        archive.peer = data[2]
+        day, month, year, time_, ampm, tzone = data[5:11]
+        day, archive.year = map(int, (day, year))
+        archive.month = months[month.rstrip(',')]
+        for line in infile:
             if line.startswith('('):
-                time, u, tzone, sender, content = line.split(' ', 4)
+                time_, u, tzone, sender, content = line.split(' ', 4)
                 if not sender.endswith(':'):
                     continue
-                time = tuple(map(int, time.lstrip('(').rstrip(')').split(':')))
+                time_ = time.strptime("".join([time_.lstrip('('), ampm]), '%I:%M:%S%p')[3:6]
                 inbound = True if sender.startswith(archive.peer) else False
-                msg = Message(inbound, day, time, content.rstrip())
+                msg = Message(inbound, day, time_, content.rstrip())
                 archive.messages.append(msg)
-            elif line.startswith('Conversation'):
-                data = line.split()
-                archive.myself = data[12]
-                archive.peer = data[2]
-                day, month, year = data[5:8]
-                day, archive.year = map(int, (day, year))
-                archive.month = months[month.rstrip(',')]
-        file.close()
+        infile.close()
     return archive
 
 
@@ -280,27 +278,27 @@ def yahoo_decode(files):
         encrypt_id = ps[ps.index('Profiles') + 1]
         archive.peer = ps[ps.index('Messages') + 1]
         archive.myself = ps[ps.index(archive.peer, ps.index('Messages')) + 1].split('-')[1].rstrip('.dat')
-        file = open(path, 'rb')
-        while file:
+        infile = open(path, 'rb')
+        while infile:
             # Initialize the 'data readers'.
             readint = array('l') # 32-bit signed int
             readbyte = array('b') # 1 byte (8-bit int)
             try:
-                readint.fromfile(file, 4)
+                readint.fromfile(infile, 4)
             except EOFError:
                 break
             timestamp, unknown, user, msglength = readint.tolist()
             # Get message direction.
             inbound = True if user else False
             # Get the date and time info.
-            month, day, time, year = ctime(timestamp).split()[1:]
+            month, day, time_, year = time.ctime(timestamp).split()[1:]
             day = int(day)
-            time = tuple(map(int, time.split(':')))
+            time_ = tuple(map(int, time_.split(':')))
             if archive.month is None:
                 archive.month = months[month]
                 archive.year = int(year)
             # Read the message content.
-            readbyte.fromfile(file, msglength)
+            readbyte.fromfile(infile, msglength)
             idx = 0
             content = []
             # Decode the message.
@@ -310,9 +308,9 @@ def yahoo_decode(files):
                 idx += 1
                 if idx == len(encrypt_id):
                     idx = 0
-            msg = Message(inbound, day, time, "".join(content))
+            msg = Message(inbound, day, time_, "".join(content))
             archive.messages.append(msg)
             # Read message terminator.
-            readint.fromfile(file, 1)
-        file.close()
+            readint.fromfile(infile, 1)
+        infile.close()
     return archive
