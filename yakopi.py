@@ -1,6 +1,6 @@
 # $Id$
 #
-# yakopi - Yahoo! Messenger/Kopete/Pidgin Archives Converter
+# YaKoPi - Yahoo! Messenger/Kopete/Pidgin Archives Converter
 # Copyright (C) 2008  Darwin M. Bautista
 #
 # This program is free software: you can redistribute it and/or modify
@@ -268,7 +268,7 @@ def yahoo_decode(files, user_id='', buddy_nick=''):
 
     for path in files:
         ps = path.split(os.sep)
-        # Extract info based on path.
+        # Extract user_id based on path.
         if not user_id:
             try:
                 archive.user_id = user_id = ps[ps.index('Profiles') + 1]
@@ -276,7 +276,7 @@ def yahoo_decode(files, user_id='', buddy_nick=''):
                 raise ParserError("user_id not specified and can't be extracted from the path.")
         else:
             archive.user_id = user_id
-
+        # Extract buddy_nick based on path.
         if not buddy_nick:
             try:
                 archive.buddy_nick = ps[ps.index('Messages') + 1]
@@ -284,7 +284,7 @@ def yahoo_decode(files, user_id='', buddy_nick=''):
                 raise ParserError("buddy_nick not specified and can't be extracted from the path.")
         else:
             archive.buddy_nick = buddy_nick
-
+        # Extract user_nick based on path.
         try:
             archive.user_nick = ps[ps.index(archive.buddy_nick, ps.index('Messages')) + 1].split('-')[1].rstrip('.dat')
         except (IndexError, ValueError):
