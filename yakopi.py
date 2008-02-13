@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-
 import os
 import time
 from datetime import datetime
@@ -51,12 +50,13 @@ class Message(object):
 class Archive(object):
 
     def __init__(self):
-        self.myself = None
-        self.peer = None
+        self.user_id = None
+        self.user_nick = None
+        self.buddy_nick = None
         self.messages = []
 
     def __repr__(self):
-        return "<Conversation of %s with %s>" % (self.myself, self.peer)
+        return "<Conversation of %s with %s>" % (self.user_id, self.buddy_nick)
 
     def to_kopete(self, outdir=None):
         """Output the archive contents as a Kopete history file.
@@ -82,19 +82,19 @@ class Archive(object):
         date.setAttribute('month', str(month))
         date.setAttribute('year', str(year))
         head.appendChild(date)
-        # contact: myself
-        myself = doc.createElement('contact')
-        myself.setAttribute('contactId', self.myself)
-        myself.setAttribute('type', 'myself')
-        head.appendChild(myself)
-        # contact: peer
-        peer = doc.createElement('contact')
-        peer.setAttribute('contactId', self.peer)
-        head.appendChild(peer)
+        # contact: user
+        user = doc.createElement('contact')
+        user.setAttribute('contactId', self.user_id)
+        user.setAttribute('type', 'myself')
+        head.appendChild(user)
+        # contact: buddy
+        buddy = doc.createElement('contact')
+        buddy.setAttribute('contactId', self.buddy_nick)
+        head.appendChild(buddy)
         # msg
         for message in self.messages:
             msg = doc.createElement('msg')
-            from_ = self.peer if message.inbound else self.myself
+            from_ = self.buddy_nick if message.inbound else self.user_id
             in_ = '1' if message.inbound else '0'
             time_ = "%d %d:%d:%d" % message.datetime[2:6]
             msg.setAttribute('nick', from_)
@@ -111,7 +111,7 @@ class Archive(object):
             replace('<m', '\n <m').replace('</k', '\n</k')
 
         if outdir is not None:
-            fname = "%s.%d%02d.xml" % (self.peer, year, month)
+            fname = "%s.%d%02d.xml" % (self.buddy_nick, year, month)
             path = os.path.join(outdir, fname)
             outfile = open(path, 'w')
             outfile.writelines(xml)
@@ -128,11 +128,11 @@ class Archive(object):
         """
         datetime_ = datetime(*self.messages[0].datetime)
         lines = []
-        line = "Conversation with %s at %s on %s (yahoo)" % (self.peer, datetime_.strftime('%A, %d %B, %Y %I:%M:%S %p'), self.myself)
+        line = "Conversation with %s at %s on %s (yahoo)" % (self.buddy_nick, datetime_.strftime('%A, %d %B, %Y %I:%M:%S %p'), self.user_id)
         lines.append(line)
         for msg in self.messages:
             time_str = datetime(*msg.datetime).strftime('%I:%M:%S')
-            line = "(%s) %s: %s" % (time_str, self.peer if msg.inbound else self.myself, msg.content)
+            line = "(%s) %s: %s" % (time_str, self.buddy_nick if msg.inbound else self.user_id, msg.content)
             lines.append(line)
         if outdir is not None:
             fname = datetime_.strftime('%Y-%m-%d.%H%M%S.txt')
@@ -167,11 +167,11 @@ def kopete_parse(path):
     # Get contact info.
     for contact in doc.getElementsByTagName('contact'):
         if contact.getAttribute('type') == 'myself':
-            myself = contact.getAttribute('contactId')
+            user_id = contact.getAttribute('contactId')
         else:
-            peer = contact.getAttribute('contactId')
-    archive.myself = str(myself)
-    archive.peer = str(peer)
+            buddy_nick = contact.getAttribute('contactId')
+    archive.user_id = str(user_id)
+    archive.buddy_nick = str(buddy_nick)
     # Get month and year info.
     date = doc.getElementsByTagName('date')[0]
     month = int(date.getAttribute('month'))
@@ -179,8 +179,11 @@ def kopete_parse(path):
     # Get message info.
     # TODO: buzz = 'Buzz!!'
     for msg in doc.getElementsByTagName('msg'):
+        try:
+            content = str(msg.childNodes[0].wholeText)
+        except IndexError:
+            continue
         inbound = True if msg.getAttribute('in') == '1' else False
-        content = str(msg.childNodes[0].wholeText)
         day, time_ = msg.getAttribute('time').split()
         time_ = tuple(map(int, time_.split(':')))
         message = Message(inbound, (year, month, int(day))+time_, content)
@@ -200,8 +203,8 @@ def gaim_parse(files):
     for filename in files:
         infile = open(filename, 'r')
         data = infile.readline().split()
-        archive.myself = data[7]
-        archive.peer = data[2]
+        archive.user_id = data[7]
+        archive.buddy_nick = data[2]
         date = time.strptime(data[4], '%Y-%m-%d')[:3]
         # TODO: look out for 'Buzz!'
         for line in infile:
@@ -210,7 +213,7 @@ def gaim_parse(files):
                 if not sender.endswith(':'):
                     continue
                 time_ = tuple(map(int, time_.lstrip('(').rstrip(')').split(':')))
-                inbound = True if sender.startswith(archive.peer) else False
+                inbound = True if sender.startswith(archive.buddy_nick) else False
                 msg = Message(inbound, date+time_, content.rstrip())
                 archive.messages.append(msg)
         infile.close()
@@ -229,8 +232,8 @@ def pidgin_parse(files):
     for filename in files:
         infile = open(filename, 'r')
         data = infile.readline().split()
-        archive.myself = data[12]
-        archive.peer = data[2]
+        archive.user_id = data[12]
+        archive.buddy_nick = data[2]
         ampm = data[9]
         date = time.strptime("".join(data[5:8]), '%d%B,%Y')[:3]
         # TODO: look out for 'Buzz!'
@@ -240,8 +243,8 @@ def pidgin_parse(files):
                 if not sender.endswith(':'):
                     continue
                 time_ = time.strptime("".join([time_, ampm]), '(%I:%M:%S%p')[3:6]
-                inbound = True if sender.startswith(archive.peer) else False
-                msg = Message(inbound, date + time_, content.rstrip())
+                inbound = True if sender.startswith(archive.buddy_nick) else False
+                msg = Message(inbound, date+time_, content.rstrip())
                 archive.messages.append(msg)
         infile.close()
     return archive
@@ -259,12 +262,12 @@ def yahoo_decode(files):
     for path in files:
         ps = path.split(os.sep)
         # Extract info based on path.
-        encrypt_id = ps[ps.index('Profiles') + 1]
-        archive.peer = ps[ps.index('Messages') + 1]
-        archive.myself = ps[ps.index(archive.peer, ps.index('Messages')) + 1].split('-')[1].rstrip('.dat')
+        archive.user_id = user_id = ps[ps.index('Profiles') + 1]
+        archive.buddy_nick = ps[ps.index('Messages') + 1]
+        archive.user_nick = ps[ps.index(archive.buddy_nick, ps.index('Messages')) + 1].split('-')[1].rstrip('.dat')
         infile = open(path, 'rb')
         # TODO: look out for 'Buzz!'
-        while infile:
+        while True:
             # Initialize the 'data readers'.
             readint = array('l') # 32-bit signed int
             readbyte = array('b') # 1 byte (8-bit int)
@@ -272,22 +275,18 @@ def yahoo_decode(files):
                 readint.fromfile(infile, 4)
             except EOFError:
                 break
-            timestamp, unknown, user, msglength = readint.tolist()
+            timestamp, blank, inbound, msglength = readint
             # Get message direction.
-            inbound = True if user else False
+            inbound = bool(inbound)
             # Get the date and time info.
             datetime_ = time.localtime(timestamp)[:6]
             # Read the message content.
             readbyte.fromfile(infile, msglength)
-            idx = 0
             content = []
             # Decode the message.
-            for byte in readbyte:
-                if byte >= 0:
-                    content.append(chr(byte ^ ord(encrypt_id[idx])))
-                idx += 1
-                if idx == len(encrypt_id):
-                    idx = 0
+            for i in range(msglength):
+                if readbyte[i] >= 0:
+                    content.append(chr(readbyte[i] ^ ord(user_id[i % len(user_id)])))
             msg = Message(inbound, datetime_, "".join(content))
             archive.messages.append(msg)
             # Read message terminator.
