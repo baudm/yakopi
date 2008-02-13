@@ -33,6 +33,10 @@ __all__ = [
     ]
 
 
+class ParserError(Exception):
+    """Raised for all parsing-related errors"""
+
+
 class Message(object):
 
     __slots__ = ['inbound', 'datetime', 'content']
@@ -163,6 +167,7 @@ def kopete_parse(path):
     Returns an instance of Archive which contains the data.
     """
     archive = Archive()
+
     doc = minidom.parse(path)
     # Get contact info.
     for contact in doc.getElementsByTagName('contact'):
@@ -250,10 +255,12 @@ def pidgin_parse(files):
     return archive
 
 
-def yahoo_decode(files):
+def yahoo_decode(files, user_id='', buddy_nick=''):
     """Decode a Yahoo! Messenger archive file
 
     @param files: list of archive files (full path)
+    @param user_id='': ID of the user (if empty, extract from path)
+    @param buddy_nick='': nickname of the buddy (if empty, extract from path)
 
     Returns an instance of Archive which contains the data.
     """
@@ -262,9 +269,27 @@ def yahoo_decode(files):
     for path in files:
         ps = path.split(os.sep)
         # Extract info based on path.
-        archive.user_id = user_id = ps[ps.index('Profiles') + 1]
-        archive.buddy_nick = ps[ps.index('Messages') + 1]
-        archive.user_nick = ps[ps.index(archive.buddy_nick, ps.index('Messages')) + 1].split('-')[1].rstrip('.dat')
+        if not user_id:
+            try:
+                archive.user_id = user_id = ps[ps.index('Profiles') + 1]
+            except (IndexError, ValueError):
+                raise ParserError("user_id not specified and can't be extracted from the path.")
+        else:
+            archive.user_id = user_id
+
+        if not buddy_nick:
+            try:
+                archive.buddy_nick = ps[ps.index('Messages') + 1]
+            except (IndexError, ValueError):
+                raise ParserError("buddy_nick not specified and can't be extracted from the path.")
+        else:
+            archive.buddy_nick = buddy_nick
+
+        try:
+            archive.user_nick = ps[ps.index(archive.buddy_nick, ps.index('Messages')) + 1].split('-')[1].rstrip('.dat')
+        except (IndexError, ValueError):
+            archive.user_nick = user_id
+
         infile = open(path, 'rb')
         # TODO: look out for 'Buzz!'
         while True:
