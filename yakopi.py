@@ -19,7 +19,7 @@
 
 import os
 import time
-import datetime
+from datetime import datetime
 from array import array
 from xml.dom import minidom
 
@@ -36,12 +36,11 @@ __all__ = [
 
 class Message(object):
 
-    __slots__ = ['inbound', 'day', 'time', 'content']
+    __slots__ = ['inbound', 'datetime', 'content']
 
-    def __init__(self, inbound, day, time, content):
+    def __init__(self, inbound, datetime, content):
         self.inbound = inbound
-        self.day = day
-        self.time = time
+        self.datetime = datetime
         self.content = content
 
     def __repr__(self):
@@ -54,8 +53,6 @@ class Archive(object):
     def __init__(self):
         self.myself = None
         self.peer = None
-        self.year = None
-        self.month = None
         self.messages = []
 
     def __repr__(self):
@@ -81,8 +78,9 @@ class Archive(object):
         history.appendChild(head)
         # date
         date = doc.createElement('date')
-        date.setAttribute('month', str(self.month))
-        date.setAttribute('year', str(self.year))
+        year, month = self.messages[0].datetime[:2]
+        date.setAttribute('month', str(month))
+        date.setAttribute('year', str(year))
         head.appendChild(date)
         # contact: myself
         myself = doc.createElement('contact')
@@ -98,11 +96,11 @@ class Archive(object):
             msg = doc.createElement('msg')
             from_ = self.peer if message.inbound else self.myself
             in_ = '1' if message.inbound else '0'
-            time = "%d %s" % (message.day, ":".join(map(str, message.time)))
+            time_ = "%d %d:%d:%d" % message.datetime[2:6]
             msg.setAttribute('nick', from_)
             msg.setAttribute('in', in_)
             msg.setAttribute('from', from_)
-            msg.setAttribute('time', time)
+            msg.setAttribute('time', time_)
             content = doc.createTextNode(message.content)
             msg.appendChild(content)
             history.appendChild(msg)
@@ -113,7 +111,7 @@ class Archive(object):
             replace('<m', '\n <m').replace('</k', '\n</k')
 
         if outdir is not None:
-            fname = "%s.%d%02d.xml" % (self.peer, self.year, self.month)
+            fname = "%s.%d%02d.xml" % (self.peer, year, month)
             path = os.path.join(outdir, fname)
             outfile = open(path, 'w')
             outfile.writelines(xml)
@@ -128,17 +126,15 @@ class Archive(object):
 
         Returns the file contents if outdir is None, else returns None.
         """
-        msg = self.messages[0]
-        datetime_ = datetime.datetime(self.year, self.month, msg.day, *msg.time)
+        datetime_ = datetime(*self.messages[0].datetime)
         lines = []
         line = "Conversation with %s at %s on %s (yahoo)" % (self.peer, datetime_.strftime('%A, %d %B, %Y %I:%M:%S %p'), self.myself)
         lines.append(line)
         for msg in self.messages:
-            time_str = datetime.time(*msg.time).strftime('%I:%M:%S')
+            time_str = datetime(*msg.datetime).strftime('%I:%M:%S')
             line = "(%s) %s: %s" % (time_str, self.peer if msg.inbound else self.myself, msg.content)
             lines.append(line)
         if outdir is not None:
-            msg = self.messages[0]
             fname = datetime_.strftime('%Y-%m-%d.%H%M%S.txt')
             path = os.path.join(outdir, fname)
             outfile = open(path, 'w')
@@ -178,41 +174,44 @@ def kopete_parse(path):
     archive.peer = str(peer)
     # Get month and year info.
     date = doc.getElementsByTagName('date')[0]
-    archive.month = int(date.getAttribute('month'))
-    archive.year = int(date.getAttribute('year'))
+    month = int(date.getAttribute('month'))
+    year = int(date.getAttribute('year'))
     # Get message info.
+    # TODO: buzz = 'Buzz!!'
     for msg in doc.getElementsByTagName('msg'):
         inbound = True if msg.getAttribute('in') == '1' else False
         content = str(msg.childNodes[0].wholeText)
-        day, time = msg.getAttribute('time').split()
-        time = tuple(map(int, time.split(':')))
-        message = Message(inbound, int(day), time, content)
+        day, time_ = msg.getAttribute('time').split()
+        time_ = tuple(map(int, time_.split(':')))
+        message = Message(inbound, (year, month, int(day))+time_, content)
         archive.messages.append(message)
     return archive
 
 
 def gaim_parse(files):
-    """Parse a list of Pidgin log files
+    """Parse a list of Gaim log files
 
     @param files: list of log files
 
     Returns an instance of Archive which contains the data.
     """
     archive = Archive()
+
     for filename in files:
         infile = open(filename, 'r')
         data = infile.readline().split()
         archive.myself = data[7]
         archive.peer = data[2]
-        archive.year, archive.month, day = map(int, data[4].split('-'))
+        date = time.strptime(data[4], '%Y-%m-%d')[:3]
+        # TODO: look out for 'Buzz!'
         for line in infile:
             if line.startswith('('):
-                time, sender, content = line.split(' ', 2)
+                time_, sender, content = line.split(' ', 2)
                 if not sender.endswith(':'):
                     continue
-                time = tuple(map(int, time.lstrip('(').rstrip(')').split(':')))
+                time_ = tuple(map(int, time_.lstrip('(').rstrip(')').split(':')))
                 inbound = True if sender.startswith(archive.peer) else False
-                msg = Message(inbound, day, time, content.rstrip())
+                msg = Message(inbound, date+time_, content.rstrip())
                 archive.messages.append(msg)
         infile.close()
     return archive
@@ -225,29 +224,24 @@ def pidgin_parse(files):
 
     Returns an instance of Archive which contains the data.
     """
-
-    months = {
-        'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6,
-        'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12
-        }
-
     archive = Archive()
+
     for filename in files:
         infile = open(filename, 'r')
         data = infile.readline().split()
         archive.myself = data[12]
         archive.peer = data[2]
-        day, month, year, time_, ampm, tzone = data[5:11]
-        day, archive.year = map(int, (day, year))
-        archive.month = months[month.rstrip(',')]
+        ampm = data[9]
+        date = time.strptime("".join(data[5:8]), '%d%B,%Y')[:3]
+        # TODO: look out for 'Buzz!'
         for line in infile:
             if line.startswith('('):
-                time_, u, tzone, sender, content = line.split(' ', 4)
+                time_, emptystr, tzone, sender, content = line.split(' ', 4)
                 if not sender.endswith(':'):
                     continue
-                time_ = time.strptime("".join([time_.lstrip('('), ampm]), '%I:%M:%S%p')[3:6]
+                time_ = time.strptime("".join([time_, ampm]), '(%I:%M:%S%p')[3:6]
                 inbound = True if sender.startswith(archive.peer) else False
-                msg = Message(inbound, day, time_, content.rstrip())
+                msg = Message(inbound, date + time_, content.rstrip())
                 archive.messages.append(msg)
         infile.close()
     return archive
@@ -260,14 +254,6 @@ def yahoo_decode(files):
 
     Returns an instance of Archive which contains the data.
     """
-    #
-    # TODO: look out for 'Buzz!'
-
-    months = {
-        'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
-        'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12
-        }
-
     archive = Archive()
 
     for path in files:
@@ -277,6 +263,7 @@ def yahoo_decode(files):
         archive.peer = ps[ps.index('Messages') + 1]
         archive.myself = ps[ps.index(archive.peer, ps.index('Messages')) + 1].split('-')[1].rstrip('.dat')
         infile = open(path, 'rb')
+        # TODO: look out for 'Buzz!'
         while infile:
             # Initialize the 'data readers'.
             readint = array('l') # 32-bit signed int
@@ -289,12 +276,7 @@ def yahoo_decode(files):
             # Get message direction.
             inbound = True if user else False
             # Get the date and time info.
-            month, day, time_, year = time.ctime(timestamp).split()[1:]
-            day = int(day)
-            time_ = tuple(map(int, time_.split(':')))
-            if archive.month is None:
-                archive.month = months[month]
-                archive.year = int(year)
+            datetime_ = time.localtime(timestamp)[:6]
             # Read the message content.
             readbyte.fromfile(infile, msglength)
             idx = 0
@@ -306,7 +288,7 @@ def yahoo_decode(files):
                 idx += 1
                 if idx == len(encrypt_id):
                     idx = 0
-            msg = Message(inbound, day, time_, "".join(content))
+            msg = Message(inbound, datetime_, "".join(content))
             archive.messages.append(msg)
             # Read message terminator.
             readint.fromfile(infile, 1)
