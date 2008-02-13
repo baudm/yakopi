@@ -19,7 +19,7 @@
 import os
 from optparse import OptionParser
 
-from yakopi import yahoo_decode
+import yakopi
 
 __version__ = "$Revision$"
 
@@ -35,24 +35,31 @@ def main():
     ver = "".join(['%prog ', __version__])
     parser = OptionParser(version=ver, conflict_handler='resolve')
     # Add options
-    parser.add_option('-k', '--kopete', action='store_const', const='kopete', dest='format')
-    parser.add_option('-p', '--pidgin', action='store_const', const='pidgin', dest='format')
+    parser.add_option('-k', '--kopete', action='store_const', const='kopete',
+        dest='format', help='use Kopete log file format')
+    parser.add_option('-p', '--pidgin', action='store_const', const='pidgin',
+        dest='format', help='use Pidgin log file format')
     parser.add_option('-o', '--outdir', dest='outdir', metavar='DIR',
-        default=os.getcwd(), help='Output directory')
+        default=os.getcwd(), help='output directory')
 
     options, args = parser.parse_args()
     if not args:
-        parser.error('no files specified.')
+        parser.error('no files to convert')
     args.sort()
     monthly = uniq([os.path.basename(path)[:6] for path in args])
 
     for month in monthly:
         files = [path for path in args if os.path.basename(path).startswith(month)]
-        archive = yahoo_decode(files)
+        try:
+            archive = yakopi.yahoo_decode(files)
+        except yakopi.ParserError, msg:
+            parser.error(msg)
         if options.format == 'kopete':
             archive.to_kopete(options.outdir)
         elif options.format == 'pidgin':
             archive.to_pidgin(options.outdir)
+        else:
+            parser.error('format not specified')
 
 
 if __name__ == "__main__":
