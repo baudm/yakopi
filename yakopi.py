@@ -100,7 +100,7 @@ class Archive(object):
             msg = doc.createElement('msg')
             from_ = self.buddy_nick if message.inbound else self.user_id
             in_ = '1' if message.inbound else '0'
-            time_ = "%d %d:%d:%d" % message.datetime[2:6]
+            time_ = "%d %d:%d:%d" % message.datetime[2:]
             msg.setAttribute('nick', from_)
             msg.setAttribute('in', in_)
             msg.setAttribute('from', from_)
@@ -210,7 +210,7 @@ def gaim_parse(files):
         data = infile.readline().split()
         archive.user_id = data[7]
         archive.buddy_nick = data[2]
-        date = time.strptime(data[4], '%Y-%m-%d')[:3]
+        date = tuple(map(int, data[4].split('-')))
         # TODO: look out for 'Buzz!'
         for line in infile:
             if line.startswith('('):
@@ -293,18 +293,25 @@ def yahoo_decode(files, user_id='', buddy_nick=''):
         infile = open(path, 'rb')
         # TODO: look out for 'Buzz!'
         while True:
-            # Initialize the 'data readers'.
-            readint = array('l') # 32-bit signed int
-            readbyte = array('b') # 1 byte (8-bit int)
+            # container for 32-bit signed int
+            readint = array('l')
             try:
                 readint.fromfile(infile, 4)
             except EOFError:
                 break
             timestamp, blank, inbound, msglength = readint
+            # A message separator/break:
+            # TODO: Mark this as a message separator (useful for Pidgin output).
+            if not msglength:
+                # Read message terminator.
+                readint.fromfile(infile, 1)
+                continue
             # Get message direction.
             inbound = bool(inbound)
             # Get the date and time info.
             datetime_ = time.localtime(timestamp)[:6]
+            # container for 8-bit signed char (int)
+            readbyte = array('b')
             # Read the message content.
             readbyte.fromfile(infile, msglength)
             content = []
