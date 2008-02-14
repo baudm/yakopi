@@ -317,8 +317,10 @@ def yahoo_decode(files, user_id='', buddy_nick=''):
             content = []
             # Decode the message.
             for i in range(msglength):
-                if readbyte[i] >= 0:
+                try:
                     content.append(chr(readbyte[i] ^ ord(user_id[i % len(user_id)])))
+                except ValueError:
+                    continue
             msg = Message(inbound, datetime_, "".join(content))
             archive.messages.append(msg)
             # Read message terminator.
