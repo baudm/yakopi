@@ -20,7 +20,7 @@
 import os
 import time
 from datetime import datetime
-from struct import unpack
+from array import array
 from xml.dom import minidom
 
 
@@ -257,19 +257,6 @@ def pidgin_parse(files):
     return archive
 
 
-def _read(f, type_code, n):
-    """Read n objects of type_code type from file f"""
-    type_to_len = {'b': 1, 'i': 4}
-    length = type_to_len[type_code]
-    out = []
-    for i in xrange(n):
-        enc = f.read(length)
-        if len(enc) != length:
-            raise EOFError
-        out += unpack(type_code, enc)
-    return out
-
-
 def yahoo_decode(files, user_id='', buddy_nick=''):
     """Decode a Yahoo! Messenger archive file
 
@@ -308,33 +295,37 @@ def yahoo_decode(files, user_id='', buddy_nick=''):
         infile = open(path, 'rb')
         # TODO: look out for 'Buzz!'
         while True:
+            # container for 32-bit signed int
+            readint = array('i')
             try:
-                header = _read(infile, 'i', 4)
+                readint.fromfile(infile, 4)
             except EOFError:
                 break
-            timestamp, blank, inbound, msglength = header
+            timestamp, blank, inbound, msglength = readint
             # A message separator/break:
             # TODO: Mark this as a message separator (useful for Pidgin output).
             if not msglength:
                 # Read message terminator.
-                _read(infile, 'i', 1)
+                readint.fromfile(infile, 1)
                 continue
             # Get message direction.
             inbound = bool(inbound)
             # Get the date and time info.
             datetime_ = time.localtime(timestamp)[:6]
+            # container for 8-bit signed char (int)
+            readbyte = array('b')
             # Read the message content.
-            enc_msg = _read(infile, 'b', msglength)
+            readbyte.fromfile(infile, msglength)
             content = []
             # Decode the message.
             for i in range(msglength):
                 try:
-                    content.append(chr(enc_msg[i] ^ ord(user_id[i % len(user_id)])))
+                    content.append(chr(readbyte[i] ^ ord(user_id[i % len(user_id)])))
                 except ValueError:
                     continue
             msg = Message(inbound, datetime_, "".join(content))
             archive.messages.append(msg)
             # Read message terminator.
-            _read(infile, 'i', 1)
+            readint.fromfile(infile, 1)
         infile.close()
     return archive
