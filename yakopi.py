@@ -190,7 +190,7 @@ def kopete_parse(path):
             content = str(msg.childNodes[0].wholeText)
         except IndexError:
             continue
-        inbound = True if msg.getAttribute('in') == '1' else False
+        inbound = (True if msg.getAttribute('in') == '1' else False)
         day, time_ = msg.getAttribute('time').split()
         time_ = tuple(map(int, time_.split(':')))
         message = Message(inbound, (year, month, int(day))+time_, content)
@@ -273,23 +273,22 @@ def yahoo_decode(files, user_id='', buddy_nick=''):
         # Extract user_id based on path.
         if not user_id:
             try:
-                archive.user_id = user_id = ps[ps.index('Profiles') + 1]
-            except (IndexError, ValueError):
+                archive.user_id = user_id = ps[-4]
+            except IndexError:
                 raise ParserError("user_id not specified and can't be extracted from the path.")
         else:
             archive.user_id = user_id
         # Extract buddy_nick based on path.
         if not buddy_nick:
             try:
-                archive.buddy_nick = ps[ps.index('Messages') + 1]
-            except (IndexError, ValueError):
+                archive.buddy_nick = ps[-2]
+            except IndexError:
                 raise ParserError("buddy_nick not specified and can't be extracted from the path.")
         else:
             archive.buddy_nick = buddy_nick
         # Extract user_nick based on path.
-        try:
-            archive.user_nick = ps[ps.index(archive.buddy_nick, ps.index('Messages')) + 1].split('-')[1].rstrip('.dat')
-        except (IndexError, ValueError):
+        archive.user_nick = ps[-1][9:-4]
+        if not archive.user_nick:
             archive.user_nick = user_id
 
         infile = open(path, 'rb')
