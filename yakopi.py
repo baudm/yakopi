@@ -19,6 +19,7 @@
 
 import os
 import time
+import codecs
 from datetime import datetime
 from array import array
 from xml.dom import minidom
@@ -110,7 +111,7 @@ class Archive(object):
             msg.appendChild(content)
             history.appendChild(msg)
 
-        xml = doc.toprettyxml(indent=' ').\
+        xml = doc.toprettyxml(indent=' ', encoding='utf-8').\
             replace('<?xml version="1.0" ?>\n', '').\
             replace('">', '" >').replace('/>', ' />').\
             replace(' >\n  ', ' >').replace('\n </msg>', '</msg>')
@@ -119,7 +120,7 @@ class Archive(object):
         if outdir is not None:
             fname = "%s.%d%02d.xml" % (self.buddy_nick, year, month)
             path = os.path.join(outdir, fname)
-            outfile = open(path, 'w')
+            outfile = codecs.open(path, 'w', 'utf-8')
             outfile.writelines(xml)
             outfile.close()
         else:
@@ -143,7 +144,7 @@ class Archive(object):
         if outdir is not None:
             fname = datetime_.strftime('%Y-%m-%d.%H%M%S.txt')
             path = os.path.join(outdir, fname)
-            outfile = open(path, 'w')
+            outfile = codecs.open(path, 'w', 'utf-8')
             outfile.writelines("\n".join(lines))
             outfile.close()
         else:
@@ -174,24 +175,22 @@ def kopete_parse(path):
     # Get contact info.
     for contact in doc.getElementsByTagName('contact'):
         if contact.getAttribute('type') == 'myself':
-            user_id = contact.getAttribute('contactId')
+            archive.user_id = contact.getAttribute('contactId')
         else:
-            buddy_nick = contact.getAttribute('contactId')
-    archive.user_id = str(user_id)
-    archive.buddy_nick = str(buddy_nick)
+            archive.buddy_nick = contact.getAttribute('contactId')
     # Get month and year info.
     date = doc.getElementsByTagName('date')[0]
-    month = int(date.getAttribute('month'))
-    year = int(date.getAttribute('year'))
+    month = int(date.getAttribute('month').encode('utf-8'))
+    year = int(date.getAttribute('year').encode('utf-8'))
     # Get message info.
     # TODO: buzz = 'Buzz!!'
     for msg in doc.getElementsByTagName('msg'):
         try:
-            content = str(msg.childNodes[0].wholeText)
+            content = msg.childNodes[0].wholeText
         except IndexError:
             continue
-        inbound = (True if msg.getAttribute('in') == '1' else False)
-        day, time_ = msg.getAttribute('time').split()
+        inbound = (True if msg.getAttribute('in') == u'1' else False)
+        day, time_ = msg.getAttribute('time').encode('utf-8').split()
         time_ = tuple(map(int, time_.split(':')))
         message = Message(inbound, (year, month, int(day))+time_, content)
         archive.messages.append(message)
@@ -208,7 +207,7 @@ def gaim_parse(files):
     archive = Archive()
 
     for filename in files:
-        infile = open(filename, 'r')
+        infile = codecs.open(filename, 'r', 'utf-8')
         data = infile.readline().split()
         archive.user_id = data[7]
         archive.buddy_nick = data[2]
@@ -237,7 +236,7 @@ def pidgin_parse(files):
     archive = Archive()
 
     for filename in files:
-        infile = open(filename, 'r')
+        infile = codecs.open(filename, 'r', 'utf-8')
         data = infile.readline().split()
         archive.user_id = data[12]
         archive.buddy_nick = data[2]
@@ -319,10 +318,12 @@ def yahoo_decode(files, user_id='', buddy_nick=''):
             # Decode the message.
             for i in range(msglength):
                 try:
-                    content.append(chr(readbyte[i] ^ ord(user_id[i % len(user_id)])))
+                    decoded = chr(readbyte[i] ^ ord(user_id[i % len(user_id)]))
                 except ValueError:
                     continue
-            msg = Message(inbound, datetime_, "".join(content))
+                else:
+                    content.append(decoded)
+            msg = Message(inbound, datetime_, u''.join(content))
             archive.messages.append(msg)
             # Read message terminator.
             readint.fromfile(infile, 1)
