@@ -21,14 +21,7 @@ from optparse import OptionParser
 
 import yakopi
 
-__version__ = "$Revision$"
-
-# http://aspn.activestate.com/ASPN/Cookbook/Python/Recipe/52560
-# Fastest without order preserving
-def uniq(alist):
-    set = {}
-    map(set.__setitem__, alist, [])
-    return set.keys()
+__version__ = "0.1.0"
 
 
 def main():
@@ -46,7 +39,7 @@ def main():
     if not args:
         parser.error('no files to convert')
     args.sort()
-    monthly = uniq([os.path.basename(path)[:6] for path in args])
+    monthly = list(set([os.path.basename(path)[:6] for path in args]))
 
     for month in monthly:
         files = [path for path in args if os.path.basename(path).startswith(month)]
