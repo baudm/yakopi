@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 # Part of YaKoPi - Yahoo! Messenger/Kopete/Pidgin Archives Converter
-# Copyright (C) 2008  Darwin M. Bautista
+# Copyright (C) 2008-2010  Darwin M. Bautista
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
