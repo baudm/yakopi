@@ -29,7 +29,6 @@ __all__ = [
     'Message',
     'Archive',
     'kopete_parse',
-    'gaim_parse',
     'pidgin_parse',
     'yahoo_decode'
     ]
@@ -194,35 +193,6 @@ def kopete_parse(path):
         time_ = tuple(map(int, time_.split(':')))
         message = Message(inbound, (year, month, int(day))+time_, content)
         archive.messages.append(message)
-    return archive
-
-
-def gaim_parse(files):
-    """Parse a list of Gaim log files
-
-    @param files: list of log files
-
-    Returns an instance of Archive which contains the data.
-    """
-    archive = Archive()
-
-    for filename in files:
-        infile = codecs.open(filename, 'r', 'utf-8')
-        data = infile.readline().split()
-        archive.user_id = data[7]
-        archive.buddy_nick = data[2]
-        date = tuple(map(int, data[4].split('-')))
-        # TODO: look out for 'Buzz!'
-        for line in infile:
-            if line.startswith('('):
-                time_, sender, content = line.split(' ', 2)
-                if not sender.endswith(':'):
-                    continue
-                time_ = tuple(map(int, time_.lstrip('(').rstrip(')').split(':')))
-                inbound = True if sender.startswith(archive.buddy_nick) else False
-                msg = Message(inbound, date+time_, content.rstrip())
-                archive.messages.append(msg)
-        infile.close()
     return archive
 
 
