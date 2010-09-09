@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-# $Id$
 #
 # YaKoPi - Yahoo! Messenger/Kopete/Pidgin Archives Converter
 # Copyright (C) 2008-2010  Darwin M. Bautista
@@ -119,9 +118,8 @@ class Archive(object):
         if outdir is not None:
             fname = "%s.%d%02d.xml" % (self.buddy_nick, year, month)
             path = os.path.join(outdir, fname)
-            outfile = codecs.open(path, 'w', 'utf-8')
-            outfile.writelines(xml)
-            outfile.close()
+            with codecs.open(path, 'w', 'utf-8') as outfile:
+                outfile.writelines(xml)
         else:
             return xml
 
@@ -143,9 +141,8 @@ class Archive(object):
         if outdir is not None:
             fname = datetime_.strftime('%Y-%m-%d.%H%M%S.txt')
             path = os.path.join(outdir, fname)
-            outfile = codecs.open(path, 'w', 'utf-8')
-            outfile.writelines("\n".join(lines))
-            outfile.close()
+            with codecs.open(path, 'w', 'utf-8') as outfile:
+                outfile.writelines("\n".join(lines))
         else:
             return "\n".join(lines)
 
@@ -206,23 +203,22 @@ def pidgin_parse(files):
     archive = Archive()
 
     for filename in files:
-        infile = codecs.open(filename, 'r', 'utf-8')
-        data = infile.readline().split()
-        archive.user_id = data[12]
-        archive.buddy_nick = data[2]
-        ampm = data[9]
-        date = time.strptime("".join(data[5:8]), '%d%B,%Y')[:3]
-        # TODO: look out for 'Buzz!'
-        for line in infile:
-            if line.startswith('('):
-                time_, emptystr, tzone, sender, content = line.split(' ', 4)
-                if not sender.endswith(':'):
-                    continue
-                time_ = time.strptime("".join([time_, ampm]), '(%I:%M:%S%p')[3:6]
-                inbound = True if sender.startswith(archive.buddy_nick) else False
-                msg = Message(inbound, date+time_, content.rstrip())
-                archive.messages.append(msg)
-        infile.close()
+        with codecs.open(filename, 'r', 'utf-8') as infile:
+            data = infile.readline().split()
+            archive.user_id = data[12]
+            archive.buddy_nick = data[2]
+            ampm = data[9]
+            date = time.strptime("".join(data[5:8]), '%d%B,%Y')[:3]
+            # TODO: look out for 'Buzz!'
+            for line in infile:
+                if line.startswith('('):
+                    time_, emptystr, tzone, sender, content = line.split(' ', 4)
+                    if not sender.endswith(':'):
+                        continue
+                    time_ = time.strptime("".join([time_, ampm]), '(%I:%M:%S%p')[3:6]
+                    inbound = True if sender.startswith(archive.buddy_nick) else False
+                    msg = Message(inbound, date+time_, content.rstrip())
+                    archive.messages.append(msg)
     return archive
 
 
@@ -260,42 +256,41 @@ def yahoo_decode(files, user_id='', buddy_nick=''):
         if not archive.user_nick:
             archive.user_nick = user_id
 
-        infile = open(path, 'rb')
-        # TODO: look out for 'Buzz!'
-        while True:
-            # container for 32-bit signed int
-            readint = array('i')
-            try:
-                readint.fromfile(infile, 4)
-            except EOFError:
-                break
-            timestamp, blank, inbound, msglength = readint
-            # A message separator/break:
-            # TODO: Mark this as a message separator (useful for Pidgin output).
-            if not msglength:
+        with open(path, 'rb') as infile:
+            # TODO: look out for 'Buzz!'
+            while True:
+                # container for 32-bit signed int
+                readint = array('i')
+                try:
+                    readint.fromfile(infile, 4)
+                except EOFError:
+                    break
+                timestamp, blank, inbound, msglength = readint
+                # A message separator/break:
+                # TODO: Mark this as a message separator (useful for Pidgin output).
+                if not msglength:
+                    # Read message terminator.
+                    readint.fromfile(infile, 1)
+                    continue
+                # Get message direction.
+                inbound = bool(inbound)
+                # Get the date and time info.
+                datetime_ = time.localtime(timestamp)[:6]
+                # container for 8-bit signed char (int)
+                readbyte = array('b')
+                # Read the message content.
+                readbyte.fromfile(infile, msglength)
+                content = []
+                # Decode the message.
+                for i in range(msglength):
+                    try:
+                        decoded = chr(readbyte[i] ^ ord(user_id[i % len(user_id)]))
+                    except ValueError:
+                        continue
+                    else:
+                        content.append(decoded)
+                msg = Message(inbound, datetime_, u''.join(content))
+                archive.messages.append(msg)
                 # Read message terminator.
                 readint.fromfile(infile, 1)
-                continue
-            # Get message direction.
-            inbound = bool(inbound)
-            # Get the date and time info.
-            datetime_ = time.localtime(timestamp)[:6]
-            # container for 8-bit signed char (int)
-            readbyte = array('b')
-            # Read the message content.
-            readbyte.fromfile(infile, msglength)
-            content = []
-            # Decode the message.
-            for i in range(msglength):
-                try:
-                    decoded = chr(readbyte[i] ^ ord(user_id[i % len(user_id)]))
-                except ValueError:
-                    continue
-                else:
-                    content.append(decoded)
-            msg = Message(inbound, datetime_, u''.join(content))
-            archive.messages.append(msg)
-            # Read message terminator.
-            readint.fromfile(infile, 1)
-        infile.close()
     return archive
